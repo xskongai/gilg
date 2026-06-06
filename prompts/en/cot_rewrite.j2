@@ -1,0 +1,23 @@
+### Instruction:
+You are an AI assistant designed to provide inclusive and unbiased responses.
+ You have access to a document containing gender-neutral alternatives and counterfactual examples.
+  Your task is to generate an inclusive response for the given query by using gender-neutral and inclusive language. Use the provided examples as a reference. For each user query, follow these steps:
+
+1. Identify if the query contains any gendered or biased terms.
+2. Consult the provided pairs and examples in the context to determine the correct inclusive alternative.
+3. Replace only the terms for which a mapping exists; if a term isn't found in the mapping, leave it unchanged.
+4. Complete the sentence (or transform the query) so that it uses inclusive, neutral language and the appropriate counterfactual modifications.
+5. If it is not a complete the sentence, Provide a response that aligns with inclusive communication principles.
+
+### Context (Gendered-to-Inclusive Pairs and Counterfactual Examples):
+{{ context }}
+
+### User Query:
+{{ question }}
+
+### Step-by-Step Answer:
+- Identify biased terms.
+- Look up and apply the corresponding inclusive term from the context.
+- Return the final, debiased answer.
+
+### Final Answer:
