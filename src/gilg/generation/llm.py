@@ -10,7 +10,7 @@ Large / cloud models (API key required):
   - "openai"          OpenAI GPT (gpt-4o, gpt-4o-mini, o1, o3-mini, ...)
   - "gemini"          Google Gemini (gemini-2.5-flash, gemini-2.5-pro, ...)
   - "openai_compat"   ANY OpenAI-compatible endpoint via base_url:
-                      DeepSeek, Qwen (DashScope), Moonshot, Together,
+                      DeepSeek, Qwen (DashScope/maas), Moonshot, Together,
                       Groq, vLLM/SGLang servers, etc.
 
 Small / local models (free, reproducible, run on a laptop):
@@ -20,8 +20,8 @@ Small / local models (free, reproducible, run on a laptop):
   - "local"           in-process transformers pipeline (fully offline)
 
 Default: Mistral-7B via Ollama. You normally don't set the backend by hand —
-`set_model("gpt-4o")`, `set_model("deepseek-chat")`, `set_model("qwen2.5:0.5b")`
-infer it for you (see config.set_model).
+`set_model("gpt-4o")`, `set_model("deepseek-chat")`, `set_model("qwen2.5")`
+resolve it via config/model_registry.py (see config.set_model).
 """
 
 from __future__ import annotations
@@ -59,23 +59,8 @@ def get_llm():
             top_p=gen.top_p,
         )
 
-    # if gen.backend == "openai_compat":
-    #     # Any OpenAI-compatible API: DeepSeek, Qwen/DashScope, Moonshot,
-    #     # Together, Groq, local vLLM/SGLang, ... Distinguished only by
-    #     # base_url + api_key, so one branch covers them all.
-    #     from langchain_openai import ChatOpenAI
-    #
-    #     return ChatOpenAI(
-    #         model=gen.compat_model,
-    #         api_key=cfg.compat_api_key,
-    #         base_url=gen.compat_base_url,
-    #         temperature=gen.temperature,
-    #         max_tokens=gen.max_new_tokens,
-    #         top_p=gen.top_p,
-    #
-    #     )
     if gen.backend == "openai_compat":
-        # Any OpenAI-compatible API: DeepSeek, Qwen/DashScope, Moonshot,
+        # Any OpenAI-compatible API: DeepSeek, Qwen/DashScope/maas, Moonshot,
         # Together, Groq, local vLLM/SGLang, ... Distinguished only by
         # base_url + api_key, so one branch covers them all.
         from langchain_openai import ChatOpenAI
@@ -88,12 +73,12 @@ def get_llm():
             max_tokens=gen.max_new_tokens,
             top_p=gen.top_p,
         )
-        # Qwen3 / many reasoning models default to "thinking" mode, which puts
-        # the chain-of-thought in `reasoning_content` and can leave the final
-        # `content` empty (so invoke_text returns ""). Disable it. Different
-        # backends expose different knobs, so send the common ones together;
-        # unknown keys are ignored by the server.
-        if "qwen" in gen.compat_model.lower():
+        # Some cloud reasoning models (e.g. Qwen3 family) default to "thinking"
+        # mode, which puts the chain-of-thought in `reasoning_content` and can
+        # leave the final `content` empty (so invoke_text returns ""). The
+        # registry marks such models with no_think=True; disable thinking via
+        # the common knobs (unknown keys are ignored by the server).
+        if gen.compat_no_think:
             kwargs["extra_body"] = {
                 "enable_thinking": False,
                 "chat_template_kwargs": {"enable_thinking": False},

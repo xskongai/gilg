@@ -71,7 +71,8 @@ class GenerationConfig:
 
     # OpenAI-compatible endpoints (DeepSeek, Qwen/DashScope, Moonshot, ...).
     compat_model: str = "deepseek-chat"
-    compat_base_url: str | None = None  # set by set_model preset or env
+    compat_base_url: str | None = None  # set by set_model from the registry
+    compat_no_think: bool = False  # True for cloud reasoning models (disable thinking)
 
     temperature: float = 0.7  # paper hyperparameters
     max_new_tokens: int = 512
@@ -190,36 +191,28 @@ def set_lang(lang: str) -> None:
 def set_model(name: str) -> None:
     """Override the generation model at runtime (e.g. from a --model CLI arg).
 
-    Works for both large cloud models and small local models — you give the
-    model name and the backend is inferred:
+    Routing is a lookup in config/model_registry.py, never a prefix guess:
 
-      Large / cloud (need an API key in the environment):
-        set_model("gpt-4o")            -> openai        (OPENAI_API_KEY)
-        set_model("gpt-4o-mini")       -> openai
-        set_model("o3-mini")           -> openai
-        set_model("gemini-2.5-flash")  -> gemini        (GOOGLE_API_KEY)
-        set_model("deepseek-chat")     -> openai_compat (DEEPSEEK_API_KEY)
-        set_model("deepseek-reasoner") -> openai_compat
-        set_model("qwen-max")          -> openai_compat (DASHSCOPE_API_KEY)
-        set_model("moonshot-v1-8k")    -> openai_compat (MOONSHOT_API_KEY)
+      1) explicit "backend:..." escape hatch (openai/gemini/ollama/compat)
+      2) exact match in CLOUD_MODELS  -> use its backend/base_url/key_env
+      3) exact match in LOCAL_MODELS  -> Ollama
+      4) otherwise -> treat as a local Ollama model (with a note)
 
-      Small / local (free, no key):
-        set_model("mistral")           -> ollama
-        set_model("qwen2.5")           -> ollama
-        set_model("qwen2.5:0.5b")      -> ollama  (tiny model)
-        set_model("llama3.2:1b")       -> ollama  (tiny model)
-        set_model("gemma2:2b")         -> ollama  (small model)
-        set_model("phi3")              -> ollama
+    Examples:
+      set_model("gpt-4o")        -> openai        (in CLOUD_MODELS)
+      set_model("qwen3.7-max")   -> openai_compat (in CLOUD_MODELS, no_think)
+      set_model("qwen2.5")       -> ollama        (in LOCAL_MODELS)
+      set_model("glm4:9b")       -> ollama        (in LOCAL_MODELS, NOT cloud GLM)
 
-    Escape hatches for anything not in the table:
-        set_model("openai:gpt-4.1")            force OpenAI
-        set_model("gemini:gemini-2.5-pro")     force Gemini
-        set_model("ollama:my-custom-model")    force Ollama
-        set_model("compat:my-model@https://host/v1")  arbitrary OpenAI-compatible
+    Escape hatches for anything not in the registry:
+      set_model("openai:gpt-4.1")
+      set_model("gemini:gemini-2.5-pro")
+      set_model("ollama:my-custom-model")
+      set_model("compat:my-model@https://host/v1")
 
     Must be called before the LLM is first built; clears the cached LLM.
     """
-    backend, model, base_url, key_env = _resolve_model(name)
+    backend, model, base_url, key_env, no_think = _resolve_model(name)
 
     cfg.generation.backend = backend
     if backend == "openai":
@@ -231,6 +224,7 @@ def set_model(name: str) -> None:
     elif backend == "openai_compat":
         cfg.generation.compat_model = model
         cfg.generation.compat_base_url = base_url
+        cfg.generation.compat_no_think = no_think
         # Resolve the key from the provider-specific env var if present,
         # else COMPAT_API_KEY, else leave whatever is already set.
         if key_env:
@@ -243,61 +237,52 @@ def set_model(name: str) -> None:
     _clear_caches()
 
 
-# Provider presets for OpenAI-compatible endpoints: model-name prefix ->
-# (base_url, api-key env var). Add a line here to support a new provider.
-_COMPAT_PRESETS = {
-    "deepseek": ("https://api.deepseek.com", "DEEPSEEK_API_KEY"),
-    # Cloud Qwen (DashScope) uses hyphenated names: qwen-max, qwen-plus, ...
-    # Note: local Ollama Qwen is "qwen2.5" / "qwen2.5:0.5b" and is matched by
-    # the prefix below only via the hyphen, so it correctly falls through to
-    # Ollama. Use set_model("compat:qwen2.5-...") to force the cloud variant.
-    # "qwen-": ("https://ws-qda2js0k5wga6npk.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1", "QWEN_API_KEY"),
-    "qwen3": ("https://ws-qda2js0k5wga6npk.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1", "QWEN_API_KEY"),
-    "moonshot": ("https://api.moonshot.cn/v1", "MOONSHOT_API_KEY"),
-    "glm": ("https://open.bigmodel.cn/api/paas/v4", "ZHIPU_API_KEY"),
-}
-
-
 def _resolve_model(name: str):
-    """Map a model name to (backend, model, base_url, key_env).
+    """Map a model name to (backend, model, base_url, key_env, no_think).
 
-    Order: explicit "backend:..." prefix > known cloud families > compat
-    presets > default to local Ollama.
+    Lookup order: explicit prefix > CLOUD_MODELS > LOCAL_MODELS > Ollama fallback.
+    Exact-match lookup (not prefix matching) means same-family names that live
+    in different places — e.g. local "qwen2.5" vs cloud "qwen3.7-max", or local
+    "glm4:9b" vs cloud GLM — are never confused.
     """
-    # 1) Explicit prefix escape hatch.
-    if ":" in name and name.split(":", 1)[0] in {
-        "openai", "gemini", "ollama", "hf", "compat"
-    }:
+    from config.model_registry import CLOUD_MODELS, LOCAL_MODELS
+
+    # 1) Explicit "backend:..." escape hatch (always wins).
+    if ":" in name and name.split(":", 1)[0] in {"openai", "gemini", "ollama", "hf", "compat"}:
         kind, rest = name.split(":", 1)
         if kind == "openai":
-            return "openai", rest, None, None
+            return "openai", rest, None, None, False
         if kind == "gemini":
-            return "gemini", rest, None, None
+            return "gemini", rest, None, None, False
         if kind == "ollama":
-            return "ollama", rest, None, None
+            return "ollama", rest, None, None, False
         if kind == "compat":
             # "compat:model@https://host/v1"
             if "@" in rest:
                 m, url = rest.split("@", 1)
-                return "openai_compat", m, url, None
-            return "openai_compat", rest, cfg.generation.compat_base_url, None
+                return "openai_compat", m, url, None, False
+            return "openai_compat", rest, cfg.generation.compat_base_url, None, False
 
-    low = name.lower()
+    # 2) Exact match in the cloud registry.
+    if name in CLOUD_MODELS:
+        spec = CLOUD_MODELS[name]
+        return (
+            spec["backend"],
+            name,
+            spec.get("base_url"),
+            spec.get("key_env"),
+            spec.get("no_think", False),
+        )
 
-    # 2) Known cloud families.
-    if low.startswith(("gpt", "o1", "o3", "o4", "chatgpt")):
-        return "openai", name, None, None
-    if low.startswith("gemini"):
-        return "gemini", name, None, None
+    # 3) Exact match in the local registry -> Ollama.
+    if name in LOCAL_MODELS:
+        return "ollama", name, None, None, False
 
-    # 3) OpenAI-compatible providers by name prefix.
-    for prefix, (url, key_env) in _COMPAT_PRESETS.items():
-        if low.startswith(prefix):
-            return "openai_compat", name, url, key_env
-
-    # 4) Default: treat as a local Ollama model (covers all small models,
-    #    e.g. qwen2.5:0.5b, llama3.2:1b, gemma2:2b, phi3, ...).
-    return "ollama", name, None, None
+    # 4) Fallback: unknown name, assume a local Ollama model.
+    #    (Covers ad-hoc pulls not yet added to LOCAL_MODELS.)
+    print(f"[config] '{name}' not in registry; assuming local Ollama model. "
+          f"Add it to LOCAL_MODELS or CLOUD_MODELS to be explicit.")
+    return "ollama", name, None, None, False
 
 
 def set_temperature(value: float) -> None:
