@@ -10,10 +10,22 @@ uniformly (r1 == r_final, no second pass).
 
 from __future__ import annotations
 
-from gilg.generation.llm import get_llm
+from gilg.generation.llm import get_llm, invoke_text
 from gilg.generation.pipeline import PipelineResult
 from config.config import cfg
 from gilg.utils.prompts import render
+
+
+# Generation-task verbs mark a "description" prompt (open-ended writing);
+# everything else (blanks to fill, bare statements) is "completion".
+_DESCRIPTION_STARTS = ("write ", "suggest ", "describe ", "compose ", "create ")
+
+
+def _classify(query: str) -> str:
+    q = query.strip().lower()
+    if q.startswith(_DESCRIPTION_STARTS):
+        return "description"
+    return "completion"
 
 
 class Baseline:
@@ -21,8 +33,9 @@ class Baseline:
         self._llm = get_llm()
 
     def run(self, query: str) -> PipelineResult:
-        prompt = render("baseline.j2", question=query)
-        out = str(self._llm.invoke(prompt)).strip()
+        qtype = _classify(query)
+        prompt = render("baseline.j2", question=query, qtype=qtype)
+        out = invoke_text(self._llm, prompt)
         return PipelineResult(
             query=query,
             r1=out,

@@ -10,7 +10,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 
-from config.config import ROOT, cfg
+from config.config import ROOT, active_model_name, cfg
 
 
 def new_run_dir(tag: str | None = None) -> Path:
@@ -19,20 +19,11 @@ def new_run_dir(tag: str | None = None) -> Path:
     Name: results/runs/YYYY-MM-DD_HHMMSS_<model>[_<tag>]/
     """
     stamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
-    model = _active_model().replace("/", "-").replace(":", "-")
+    model = active_model_name().replace("/", "-").replace(":", "-")
     name = f"{stamp}_{model}" + (f"_{tag}" if tag else "")
     path = ROOT / "results" / "runs" / name
     path.mkdir(parents=True, exist_ok=True)
     return path
-
-
-def _active_model() -> str:
-    b = cfg.generation.backend
-    if b == "ollama":
-        return cfg.generation.ollama_model
-    if b == "gemini":
-        return cfg.generation.gemini_model
-    return cfg.generation.repo_id
 
 
 def write_meta(run_dir: Path, **extra) -> None:
@@ -41,7 +32,7 @@ def write_meta(run_dir: Path, **extra) -> None:
         "timestamp": datetime.now().astimezone().isoformat(),
         "lang": cfg.prompt.lang,
         "backend": cfg.generation.backend,
-        "model": _active_model(),
+        "model": active_model_name(),
         "temperature": cfg.generation.temperature,
         "top_p": cfg.generation.top_p,
         "max_new_tokens": cfg.generation.max_new_tokens,

@@ -30,7 +30,7 @@ from gilg.evaluation.metrics import aggregate  # noqa: E402
 from gilg.generation.pipeline import Pipeline  # noqa: E402
 from gilg.utils.run_dir import new_run_dir, write_meta  # noqa: E402
 from gilg.utils.seeding import set_seed  # noqa: E402
-from config.config import cfg  # noqa: E402
+from config.config import cfg, active_model_name  # noqa: E402
 
 
 def main() -> None:
@@ -38,7 +38,7 @@ def main() -> None:
     parser.add_argument("--file", required=True, help="file with one query per line")
     parser.add_argument("--lang", default=None, choices=["en", "zh"],
                         help="language profile: switches data, embedding, model, index, prompts")
-    parser.add_argument("--model", default=None, help="Ollama model to use (overrides config/lang default)")
+    parser.add_argument("--model", default=None, help="model name; cloud (gpt-4o, gemini-2.5-flash, deepseek-chat, qwen-max) or local Ollama (mistral, qwen2.5, qwen2.5:0.5b, llama3.2:1b). Overrides config/lang default")
     parser.add_argument("--temperature", type=float, default=None,
                         help="generation temperature (0 = deterministic/reproducible; default 0.7)")
     parser.add_argument("--tag", default=None, help="optional label appended to the run dir")
@@ -92,7 +92,7 @@ def main() -> None:
         w = csv.writer(f)
         w.writerow(["model", "n", "GA (%)", "GN (%)", "QR (%)"])
         w.writerow([
-            cfg.generation.ollama_model, len(scores),
+            active_model_name(), len(scores),
             f"{summary['ga']:.2f}", f"{summary['gn']:.2f}", f"{summary['qr']:.2f}",
         ])
 

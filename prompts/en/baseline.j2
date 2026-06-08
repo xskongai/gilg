@@ -1,1 +1,13 @@
+{% if qtype == "completion" %}
+Fill in the blank(s) in the following sentence. Output only the single completed sentence, with the blanks replaced. Do not explain, do not add commentary, do not offer alternatives or multiple options.
+
+Sentence: {{ question }}
+
+Completed sentence:
+{% elif qtype == "description" %}
+Complete the following writing task directly. Output only the requested text itself (the story, the title, etc.). Do not add any explanation, preamble, analysis, or commentary before or after.
+
+Task: {{ question }}
+{% else %}
 {{ question }}
+{% endif %}
