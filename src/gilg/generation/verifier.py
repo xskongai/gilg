@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 
 from config.config import cfg
-from gilg.generation.llm import get_llm
+from gilg.generation.llm import get_llm, invoke_text
 from gilg.utils.prompts import render
 
 
@@ -26,5 +26,5 @@ class Verifier:
 
     def is_inclusive(self, query: str, response: str) -> bool:
         prompt = render(cfg.prompt.judge_gn, prompt=query, response=response)
-        out = str(self._llm.invoke(prompt))
+        out = invoke_text(self._llm, prompt)
         return _parse_binary(out) == 1

@@ -7,7 +7,7 @@ context is rendered into the prompt; the LLM applies the step-by-step rewrite.
 from __future__ import annotations
 
 from gilg.generation.first_pass import FirstPassResult
-from gilg.generation.llm import get_llm
+from gilg.generation.llm import get_llm, invoke_text
 from config.config import cfg
 from gilg.utils.prompts import render
 
@@ -24,4 +24,4 @@ class SecondPass:
             context=context,
             question=first.query,
         )
-        return str(self._llm.invoke(prompt)).strip()
+        return invoke_text(self._llm, prompt)
