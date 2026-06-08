@@ -251,7 +251,8 @@ _COMPAT_PRESETS = {
     # Note: local Ollama Qwen is "qwen2.5" / "qwen2.5:0.5b" and is matched by
     # the prefix below only via the hyphen, so it correctly falls through to
     # Ollama. Use set_model("compat:qwen2.5-...") to force the cloud variant.
-    "qwen-": ("https://dashscope.aliyuncs.com/compatible-mode/v1", "DASHSCOPE_API_KEY"),
+    # "qwen-": ("https://ws-qda2js0k5wga6npk.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1", "QWEN_API_KEY"),
+    "qwen3": ("https://ws-qda2js0k5wga6npk.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1", "QWEN_API_KEY"),
     "moonshot": ("https://api.moonshot.cn/v1", "MOONSHOT_API_KEY"),
     "glm": ("https://open.bigmodel.cn/api/paas/v4", "ZHIPU_API_KEY"),
 }

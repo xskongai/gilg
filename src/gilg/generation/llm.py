@@ -59,13 +59,28 @@ def get_llm():
             top_p=gen.top_p,
         )
 
+    # if gen.backend == "openai_compat":
+    #     # Any OpenAI-compatible API: DeepSeek, Qwen/DashScope, Moonshot,
+    #     # Together, Groq, local vLLM/SGLang, ... Distinguished only by
+    #     # base_url + api_key, so one branch covers them all.
+    #     from langchain_openai import ChatOpenAI
+    #
+    #     return ChatOpenAI(
+    #         model=gen.compat_model,
+    #         api_key=cfg.compat_api_key,
+    #         base_url=gen.compat_base_url,
+    #         temperature=gen.temperature,
+    #         max_tokens=gen.max_new_tokens,
+    #         top_p=gen.top_p,
+    #
+    #     )
     if gen.backend == "openai_compat":
         # Any OpenAI-compatible API: DeepSeek, Qwen/DashScope, Moonshot,
         # Together, Groq, local vLLM/SGLang, ... Distinguished only by
         # base_url + api_key, so one branch covers them all.
         from langchain_openai import ChatOpenAI
 
-        return ChatOpenAI(
+        kwargs = dict(
             model=gen.compat_model,
             api_key=cfg.compat_api_key,
             base_url=gen.compat_base_url,
@@ -73,6 +88,17 @@ def get_llm():
             max_tokens=gen.max_new_tokens,
             top_p=gen.top_p,
         )
+        # Qwen3 / many reasoning models default to "thinking" mode, which puts
+        # the chain-of-thought in `reasoning_content` and can leave the final
+        # `content` empty (so invoke_text returns ""). Disable it. Different
+        # backends expose different knobs, so send the common ones together;
+        # unknown keys are ignored by the server.
+        if "qwen" in gen.compat_model.lower():
+            kwargs["extra_body"] = {
+                "enable_thinking": False,
+                "chat_template_kwargs": {"enable_thinking": False},
+            }
+        return ChatOpenAI(**kwargs)
 
     # ---- Small / local models -------------------------------------------
 
